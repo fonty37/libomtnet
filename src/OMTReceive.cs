@@ -51,6 +51,9 @@ namespace libomtnet
         private OMTReceiveFlags flags;
         private OMTPreferredVideoFormat preferredVideoFormat;
         private OMTVMX1Codec codec = null;
+#if NET8_0_OR_GREATER
+        private codecs.OMTAV1Codec av1Codec = null;
+#endif
 
         private IntPtr tempCompressedVideo = IntPtr.Zero;
 
@@ -66,6 +69,9 @@ namespace libomtnet
         private OMTQuality suggestedQuality = OMTQuality.Default;
 
         private OMTFPA1Codec audioCodec = null;
+#if NET8_0_OR_GREATER
+        private codecs.OMTOpusCodec opusCodec = null;
+#endif
 
         private ConnectionState videoConnectionState = null;
         private ConnectionState audioConnectionState = null;
@@ -246,6 +252,18 @@ namespace libomtnet
                 codec.Dispose();
                 codec = null;
             }
+#if NET8_0_OR_GREATER
+            if (av1Codec != null)
+            {
+                av1Codec.Dispose();
+                av1Codec = null;
+            }
+            if (opusCodec != null)
+            {
+                opusCodec.Dispose();
+                opusCodec = null;
+            }
+#endif
             if (tempCompressedVideo != IntPtr.Zero)
             {
                 Marshal.FreeHGlobal(tempCompressedVideo);
@@ -941,9 +959,103 @@ namespace libomtnet
                         OMTLogging.Write("Unable to decode video at timestamp: " + frame.Timestamp, "OMTReceive.ReceiveVideo");
                     }
                 }
+
+#if NET8_0_OR_GREATER
+                else if (header.Codec == (int)OMTCodec.AV1)
+                {
+                    bool compressedOnly = this.flags.HasFlag(OMTReceiveFlags.CompressedOnly);
+                    bool result = false;
+                    OMTVideoFlags flags = (OMTVideoFlags)header.Flags;
+                    bool alpha = flags.HasFlag(OMTVideoFlags.Alpha);
+                    int frameLength = frame.Data.Length - frame.MetadataLength;
+                    int framesPerSecond = (int)OMTUtils.ToFrameRate(header.FrameRateN, header.FrameRateD);
+
+                    if (compressedOnly == false)
+                    {
+                        if (av1Codec == null || av1Codec.Width != header.Width || av1Codec.Height != header.Height)
+                        {
+                            av1Codec?.Dispose();
+                            av1Codec = new codecs.OMTAV1Codec(header.Width, header.Height, framesPerSecond);
+                        }
+
+                        VMXImageType outputType;
+                        if (preferredVideoFormat == OMTPreferredVideoFormat.BGRA ||
+                            (preferredVideoFormat == OMTPreferredVideoFormat.UYVYorBGRA && alpha))
+                        {
+                            outputType = VMXImageType.BGRA;
+                            tempVideoStride = header.Width * 4;
+                            videoFrame.Codec = (int)OMTCodec.BGRA;
+                        }
+                        else
+                        {
+                            outputType = VMXImageType.UYVY;
+                            tempVideoStride = header.Width * 2;
+                            videoFrame.Codec = (int)OMTCodec.UYVY;
+                        }
+
+                        int len = tempVideoStride * header.Height * 2;
+                        if (tempVideo == null)
+                        {
+                            tempVideo = new OMTPinnedBuffer(len);
+                        }
+                        else if (tempVideo.Length < len)
+                        {
+                            tempVideo.Dispose();
+                            tempVideo = new OMTPinnedBuffer(len);
+                        }
+
+                        byte[] dst = tempVideo.Buffer;
+                        BeginCodecTimer();
+                        result = av1Codec.Decode(outputType, frame.Data.Buffer, frameLength, ref dst, tempVideoStride);
+                        EndCodecTimer();
+                    }
+                    else
+                    {
+                        result = true;
+                        tempVideoStride = 0;
+                        videoFrame.Codec = (int)OMTCodec.AV1;
+                    }
+
+                    if (result)
+                    {
+                        videoFrame.Type = OMTFrameType.Video;
+                        videoFrame.Timestamp = frame.Timestamp;
+                        videoFrame.Width = header.Width;
+                        videoFrame.Height = header.Height;
+
+                        if (compressedOnly)
+                        {
+                            videoFrame.Data = IntPtr.Zero;
+                            videoFrame.DataLength = 0;
+                        }
+                        else
+                        {
+                            videoFrame.Data = tempVideo.Pointer;
+                            videoFrame.DataLength = tempVideoStride * header.Height;
+                        }
+
+                        videoFrame.Stride = tempVideoStride;
+
+                        if (tempCompressedVideo != IntPtr.Zero)
+                        {
+                            Marshal.Copy(frame.Data.Buffer, 0, tempCompressedVideo, frameLength);
+                        }
+                        videoFrame.CompressedData = tempCompressedVideo;
+                        videoFrame.CompressedLength = frameLength;
+                        videoFrame.Flags = flags;
+                        videoFrame.ColorSpace = (OMTColorSpace)header.ColorSpace;
+                        videoFrame.AspectRatio = header.AspectRatio;
+                        videoFrame.FrameRateN = header.FrameRateN;
+                        videoFrame.FrameRateD = header.FrameRateD;
+
+                        ReceiveFrameMetadata(frame, ref tempMetaVideo, ref videoFrame);
+                        return true;
+                    }
+                }
+#endif
                 else
                 {
-                    OMTLogging.Write("Unsupported audio codec: " + header.Codec, "OMTReceive.ReceiveVideo");
+                    OMTLogging.Write("Unsupported video codec: " + header.Codec, "OMTReceive.ReceiveVideo");
                 }
                 return false;
             }
@@ -1112,6 +1224,54 @@ namespace libomtnet
                         OMTLogging.Write("InvalidAudioSize: " + len, "OMTReceive.ReceiveAudio");
                     }
                 }
+#if NET8_0_OR_GREATER
+                else if (header.Codec == (int)OMTCodec.OPUS)
+                {
+                    int len = (header.SamplesPerChannel * header.Channels * OMTConstants.AUDIO_SAMPLE_SIZE);
+                    if (len <= OMTConstants.AUDIO_MAX_SIZE)
+                    {
+                        if (opusCodec == null || opusCodec.SampleRate != header.SampleRate || opusCodec.Channels != header.Channels)
+                        {
+                            opusCodec?.Dispose();
+                            opusCodec = new codecs.OMTOpusCodec(header.SampleRate, header.Channels);
+                        }
+
+                        if (tempAudio == null)
+                        {
+                            tempAudio = new OMTPinnedBuffer(len);
+                        }
+                        else if (tempAudio.Length < len)
+                        {
+                            tempAudio.Dispose();
+                            tempAudio = new OMTPinnedBuffer(len);
+                        }
+                        tempAudio.SetBuffer(0, 0);
+
+                        byte[] opusSrc = new byte[frame.Data.Length - frame.MetadataLength];
+                        Buffer.BlockCopy(frame.Data.Buffer, frame.Data.Offset, opusSrc, 0, opusSrc.Length);
+
+                        int decoded = opusCodec.Decode(opusSrc, opusSrc.Length, tempAudio, header.SamplesPerChannel);
+                        if (decoded > 0)
+                        {
+                            audioFrame.Type = OMTFrameType.Audio;
+                            audioFrame.Codec = (int)OMTCodec.FPA1; // Output as planar float
+                            audioFrame.Timestamp = frame.Timestamp;
+                            audioFrame.SampleRate = header.SampleRate;
+                            audioFrame.Channels = header.Channels;
+                            audioFrame.SamplesPerChannel = decoded;
+                            audioFrame.Data = tempAudio.Pointer;
+                            audioFrame.DataLength = tempAudio.Length;
+
+                            ReceiveFrameMetadata(frame, ref tempMetaAudio, ref audioFrame);
+                            return true;
+                        }
+                    }
+                    else
+                    {
+                        OMTLogging.Write("InvalidAudioSize: " + len, "OMTReceive.ReceiveAudio");
+                    }
+                }
+#endif
                 else
                 {
                     OMTLogging.Write("Unsupported audio codec: " + header.Codec, "OMTReceive.ReceiveAudio");

@@ -784,6 +784,29 @@ namespace libomtnet
                             OMTLogging.Write("Frame DataLength invalid", "OMTSend.SendVideo");
                         }
                     }
+#if NET8_0_OR_GREATER
+                    else if (frame.Codec == (int)OMTCodec.AV1)
+                    {
+                        if (frame.DataLength > 0)
+                        {
+                            tempVideo.SetDataLength(frame.DataLength + frame.FrameMetadataLength);
+                            tempVideo.SetMetadataLength(frame.FrameMetadataLength);
+                            tempVideo.SetPreviewDataLength(frame.DataLength + frame.FrameMetadataLength);
+                            Marshal.Copy(frame.Data, tempVideo.Data.Buffer, 0, frame.DataLength);
+                            if (frame.FrameMetadataLength > 0)
+                            {
+                                Marshal.Copy(frame.FrameMetadata, tempVideo.Data.Buffer, frame.DataLength, frame.FrameMetadataLength);
+                            }
+                            tempVideo.ConfigureVideo((int)OMTCodec.AV1, frame.Width, frame.Height, frame.FrameRateN, frame.FrameRateD, frame.AspectRatio, frame.Flags, frame.ColorSpace);
+                            videoClock.Process(ref frame);
+                            tempVideo.Timestamp = frame.Timestamp;
+                            return Send(tempVideo);
+                        } else
+                        {
+                            OMTLogging.Write("Frame DataLength invalid", "OMTSend.SendVideo");
+                        }
+                    }
+#endif
                     else
                     {
                         OMTLogging.Write("Codec not supported: " + frame.Codec, "OMTSend.SendVideo");
@@ -804,6 +827,23 @@ namespace libomtnet
                         OMTLogging.Write("Audio DataLength exceeded maximum: " + frame.DataLength, "OMTSend");
                         return 0;
                     }
+#if NET8_0_OR_GREATER
+                    if (frame.Codec == (int)OMTCodec.OPUS)
+                    {
+                        // Pre-encoded Opus passthrough
+                        tempAudio.Data.Resize(frame.DataLength + frame.FrameMetadataLength);
+                        Marshal.Copy(frame.Data, tempAudio.Data.Buffer, 0, frame.DataLength);
+                        if (frame.FrameMetadataLength > 0 && frame.FrameMetadata != IntPtr.Zero)
+                            tempAudio.Data.Append(frame.FrameMetadata, 0, frame.FrameMetadataLength);
+                        tempAudio.Data.SetBuffer(0, frame.DataLength);
+                        tempAudio.SetDataLength(frame.DataLength + frame.FrameMetadataLength);
+                        tempAudio.SetMetadataLength(frame.FrameMetadataLength);
+                        tempAudio.ConfigureAudio(frame.SampleRate, frame.Channels, frame.SamplesPerChannel, 0, OMTCodec.OPUS);
+                        audioClock.Process(ref frame);
+                        tempAudio.Timestamp = frame.Timestamp;
+                        return Send(tempAudio);
+                    }
+#endif
                     tempAudioBuffer.Resize(frame.DataLength);
                     tempAudio.Data.Resize(frame.DataLength + frame.FrameMetadataLength);
                     Marshal.Copy(frame.Data, tempAudioBuffer.Buffer, 0, frame.DataLength);

@@ -102,7 +102,31 @@ namespace libomtnet
         YV12 = 0x32315659,
         UYVA = 0x41565955,
         P216 = 0x36313250,
-        PA16 = 0x36314150
+        PA16 = 0x36314150,
+        AV1 = 0x31315641,
+        OPUS = 0x5355504F
+    }
+
+    /// <summary>
+    /// Selects which video codec the sender uses for encoding.
+    /// VMX1 is the default for LAN/TCP (low latency, high bitrate).
+    /// AV1 is preferred for WAN/cloud (high compression, lower bitrate).
+    /// </summary>
+    public enum OMTVideoCodec
+    {
+        VMX1 = 0,
+        AV1 = 1
+    }
+
+    /// <summary>
+    /// Selects which audio codec the sender uses for encoding.
+    /// FPA1 is the default for LAN/TCP (uncompressed, zero latency).
+    /// Opus is preferred for WAN/cloud (compressed, ~64-128 kbps).
+    /// </summary>
+    public enum OMTAudioCodec
+    {
+        FPA1 = 0,
+        Opus = 1
     }
 
     public enum OMTPlatformType
