@@ -80,10 +80,11 @@ namespace libomtnet
         /// </summary>
         /// <param name="name">Specify the name of the source not including hostname</param>
         /// <param name="quality"> Specify the quality to use for video encoding. If Default, this can be automatically adjusted based on Receiver requirements.</param>
-        public OMTSend(string name, OMTQuality quality)
+        /// <param name="timeSource">Optional time source for PTP-synchronized timestamps. If null, uses local Stopwatch.</param>
+        public OMTSend(string name, OMTQuality quality, sync.IOMTTimeSource timeSource = null)
         {
-            videoClock = new OMTClock(false);
-            audioClock = new OMTClock(true);
+            videoClock = new OMTClock(false, timeSource);
+            audioClock = new OMTClock(true, timeSource);
             metadataHandle = new AutoResetEvent(false);
             tallyHandle = new AutoResetEvent(false);
             listenEvent = new SocketAsyncEventArgs();
