@@ -39,7 +39,7 @@ namespace libomtnet.codecs
         private IntPtr ioFormatPtr;
 
         public OMTAV1Codec(int width, int height, int framesPerSecond,
-            int preset = 10, int targetBitrateMbps = 6, int threads = 0)
+            int preset = 13, int targetBitrateMbps = 6, int threads = 0)
         {
             this.width = width;
             this.height = height;
