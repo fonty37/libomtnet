@@ -1,0 +1,77 @@
+name: Build
+
+on:
+  push:
+    branches: [master, feature/*]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+          - os: macos-latest
+            name: macOS
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.name }})
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install native dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install svt-av1 dav1d opus
+
+      - name: Install native dependencies (Windows)
+        if: runner.os == 'Windows'
+        run: vcpkg install svt-av1 dav1d opus --triplet x64-windows
+        shell: cmd
+
+      - name: Add vcpkg bin to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $vcpkgRoot = "$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows"
+          echo "$vcpkgRoot\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+          echo "VCPKG_LIB=$vcpkgRoot\lib" | Out-File -FilePath $env:GITHUB_ENV -Append
+          echo "VCPKG_BIN=$vcpkgRoot\bin" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Restore
+        run: dotnet restore libomtnet.sln
+
+      - name: Build (Release)
+        run: dotnet build libomtnet.sln -c Release --no-restore
+
+      - name: Verify native libraries exist (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          echo "Checking native library availability..."
+          ls -la /opt/homebrew/lib/libSvtAv1Enc.dylib || ls -la /usr/local/lib/libSvtAv1Enc.dylib
+          ls -la /opt/homebrew/lib/libdav1d.dylib || ls -la /usr/local/lib/libdav1d.dylib
+          ls -la /opt/homebrew/lib/libopus.dylib || ls -la /usr/local/lib/libopus.dylib
+
+      - name: Verify native libraries exist (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "Checking native library availability..."
+          Get-ChildItem "$env:VCPKG_BIN" -Filter "*.dll" | Where-Object { $_.Name -match "SvtAv1Enc|dav1d|opus" }
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: libomtnet-${{ matrix.name }}
+          path: |
+            **/bin/Release/**/*.dll
+            **/bin/Release/**/*.dylib
+          retention-days: 7
