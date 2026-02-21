@@ -1,4 +1,4 @@
-﻿/*
+/*
 * MIT License
 *
 * Copyright (c) 2025 Open Media Transport Contributors
@@ -41,9 +41,23 @@ namespace libomtnet
         private int sampleRate = -1;
         private long frameInterval = -1;
         private bool audio;
-        public OMTClock(bool audio)
+        private sync.IOMTTimeSource timeSource;
+
+        public OMTClock(bool audio) : this(audio, null)
+        {
+        }
+
+        public OMTClock(bool audio, sync.IOMTTimeSource timeSource)
         {
             this.audio = audio;
+            this.timeSource = timeSource;
+        }
+
+        private long GetElapsedMs()
+        {
+            if (timeSource != null)
+                return timeSource.ElapsedMilliseconds;
+            return clock.ElapsedMilliseconds;
         }
 
         public void Process(ref OMTMediaFrame frame)
@@ -71,14 +85,14 @@ namespace libomtnet
                     frame.Timestamp = lastTimestamp + frameInterval;
                     clockTimestamp += frameInterval;
 
-                    long diff = clockTimestamp - (clock.ElapsedMilliseconds * 10000);
+                    long diff = clockTimestamp - (GetElapsedMs() * 10000);
                     while (diff < -frameInterval)
                     {
                         frame.Timestamp += frameInterval;
                         clockTimestamp += frameInterval;
                         diff += frameInterval;
                     }
-                    while (!Exiting && (clockTimestamp > clock.ElapsedMilliseconds * 10000))
+                    while (!Exiting && (clockTimestamp > GetElapsedMs() * 10000))
                     {
                         Thread.Sleep(1);
                     }
@@ -94,8 +108,15 @@ namespace libomtnet
             if (frame.FrameRate > 0)
             {
                 frameInterval = (long)(10000000 / frame.FrameRate);
-            } 
-            clock = Stopwatch.StartNew();
+            }
+            if (timeSource != null)
+            {
+                timeSource.Reset();
+            }
+            else
+            {
+                clock = Stopwatch.StartNew();
+            }
             clockTimestamp = 0;
             Debug.WriteLine("OMTClock.Reset");
         }
