@@ -7,8 +7,8 @@ namespace libomtnet.Tests;
 
 public class AV1CodecTests
 {
-    private const int Width = 320;
-    private const int Height = 240;
+    private const int Width = 640;
+    private const int Height = 480;
     private const int Fps = 30;
 
     [Fact]

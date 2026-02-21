@@ -46,8 +46,9 @@ public class PixelConverterTests
                 yPtr, yStride, uPtr, uvStride, vPtr, uvStride);
         }
 
-        // Verify Y plane has non-zero data matching our pattern
-        Assert.NotEqual(0, yPlane[1]); // second pixel Y value
+        // Verify Y plane has data matching our gradient pattern
+        // At x=10, y=0: luma = (10 + 0) % 256 = 10
+        Assert.True(yPlane[10] > 0, $"Y plane should contain gradient data, got {yPlane[10]} at offset 10");
         // Verify U/V planes are ~128 (neutral chroma)
         Assert.InRange(uPlane[0], (byte)126, (byte)130);
         Assert.InRange(vPlane[0], (byte)126, (byte)130);
