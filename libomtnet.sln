@@ -5,6 +5,10 @@ VisualStudioVersion = 17.11.35431.28
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "libomtnet", "libomtnet.csproj", "{4103721D-84E5-4037-B682-4FCF14AFEEDA}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{240EC8AE-FAF0-441F-942A-158571C7F0F2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "libomtnet.Tests", "tests\libomtnet.Tests\libomtnet.Tests.csproj", "{8BBE55EB-1D6F-4B52-8EAD-CAE94D9D144B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,11 +19,18 @@ Global
 		{4103721D-84E5-4037-B682-4FCF14AFEEDA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4103721D-84E5-4037-B682-4FCF14AFEEDA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4103721D-84E5-4037-B682-4FCF14AFEEDA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8BBE55EB-1D6F-4B52-8EAD-CAE94D9D144B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8BBE55EB-1D6F-4B52-8EAD-CAE94D9D144B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8BBE55EB-1D6F-4B52-8EAD-CAE94D9D144B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8BBE55EB-1D6F-4B52-8EAD-CAE94D9D144B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {3BF6FC38-ECEA-48A0-8F36-0921E8C0D0CA}
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{8BBE55EB-1D6F-4B52-8EAD-CAE94D9D144B} = {240EC8AE-FAF0-441F-942A-158571C7F0F2}
 	EndGlobalSection
 EndGlobal

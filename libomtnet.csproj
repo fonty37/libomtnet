@@ -1,7 +1,8 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <InternalsVisibleTo Include="omt-quic-test" />
+    <InternalsVisibleTo Include="libomtnet.Tests" />
   </ItemGroup>
 
   <PropertyGroup>
