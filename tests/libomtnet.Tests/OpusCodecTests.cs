@@ -83,7 +83,7 @@ public class OpusCodecTests
         {
             // Set bitrate to 128kbps
             // OPUS_SET_BITRATE = 4002
-            OpusUnmanaged.opus_encoder_ctl(encoder, 4002, 128000);
+            OpusUnmanaged.opus_encoder_ctl_set(encoder,4002, 128000);
 
             // Generate 440Hz sine wave
             var pcmIn = new float[FrameSamples * Channels];
@@ -139,7 +139,7 @@ public class OpusCodecTests
 
         try
         {
-            OpusUnmanaged.opus_encoder_ctl(encoder, 4002, 128000);
+            OpusUnmanaged.opus_encoder_ctl_set(encoder,4002, 128000);
 
             var pcm = new float[FrameSamples * Channels];
             for (int i = 0; i < FrameSamples; i++)
