@@ -74,62 +74,44 @@ namespace libomtnet.codecs
                 throw new Exception($"SVT-AV1 init_handle failed: 0x{ret:X8}");
 
             // Modify config fields at their known byte offsets
-            // These offsets are based on the SVT-AV1 EbSvtAv1EncConfiguration struct layout
-            // with standard C alignment rules
+            // Offsets verified against SVT-AV1 v1.7.0 EbSvtAv1EncConfiguration using offsetof()
             byte* cfg = (byte*)encConfigPtr;
 
-            // enc_mode: int8_t at offset 0
-            cfg[0] = (byte)(sbyte)preset;
+            // === Core settings ===
+            cfg[0] = (byte)(sbyte)preset;                      // enc_mode (offset 0)
+            *(int*)(cfg + 4) = framesPerSecond * 2;            // intra_period_length (offset 4): 2-second GOP
+            *(uint*)(cfg + 12) = 0;                            // hierarchical_levels (offset 12): flat
+            cfg[16] = 1;                                       // pred_structure (offset 16): low-delay
+            *(uint*)(cfg + 20) = (uint)width;                  // source_width (offset 20)
+            *(uint*)(cfg + 24) = (uint)height;                 // source_height (offset 24)
+            *(uint*)(cfg + 36) = (uint)framesPerSecond;        // frame_rate_numerator (offset 36)
+            *(uint*)(cfg + 40) = 1;                            // frame_rate_denominator (offset 40)
+            *(uint*)(cfg + 44) = 8;                            // encoder_bit_depth (offset 44)
+            *(int*)(cfg + 48) = SvtAv1Unmanaged.EB_YUV420;    // encoder_color_format (offset 48)
+            *(int*)(cfg + 52) = 0;                             // profile (offset 52)
 
-            // intra_period_length: int32_t at offset 4
-            *(int*)(cfg + 4) = framesPerSecond * 2;
+            // === Rate control: CBR for lowest latency ===
+            cfg[120] = 2;                                      // rate_control_mode (offset 120): CBR
+            *(uint*)(cfg + 132) = (uint)targetBitrate;         // target_bit_rate (offset 132)
 
-            // hierarchical_levels: uint32_t at offset 12
-            *(uint*)(cfg + 12) = 0;
+            // === Low-latency optimizations ===
+            *(int*)(cfg + 300) = 1;                            // enable_dlf_flag (offset 300): keep deblocking
+            *(int*)(cfg + 304) = 0;                            // film_grain_denoise_strength (offset 304): off
+            *(int*)(cfg + 312) = 0;                            // cdef_level (offset 312): disable CDEF
+            *(int*)(cfg + 316) = 0;                            // enable_restoration_filtering (offset 316): disable
+            *(int*)(cfg + 320) = 0;                            // enable_mfmv (offset 320): disable
+            *(int*)(cfg + 324) = 0;                            // scene_change_detection (offset 324): off
+            *(int*)(cfg + 332) = 1;                            // tile_columns (offset 332): 2 tile columns
+            *(int*)(cfg + 336) = 0;                            // tile_rows (offset 336): 1 tile row
+            *(uint*)(cfg + 340) = 0;                           // look_ahead_distance (offset 340): minimum
+            cfg[344] = 0;                                      // enable_tpl_la (offset 344): disable
+            *(uint*)(cfg + 348) = 0;                           // recode_loop (offset 348): no re-encoding
+            *(uint*)(cfg + 352) = 0;                           // screen_content_mode (offset 352): off
+            cfg[357] = 0;                                      // enable_tf (offset 357): disable temporal filter
+            cfg[366] = 1;                                      // fast_decode (offset 366): ease decoder burden
 
-            // pred_structure: uint8_t at offset 16
-            cfg[16] = 1; // Low-delay B
-
-            // source_width: uint32_t at offset 20
-            *(uint*)(cfg + 20) = (uint)width;
-
-            // source_height: uint32_t at offset 24
-            *(uint*)(cfg + 24) = (uint)height;
-
-            // frame_rate_numerator: uint32_t at offset 36
-            *(uint*)(cfg + 36) = (uint)framesPerSecond;
-
-            // frame_rate_denominator: uint32_t at offset 40
-            *(uint*)(cfg + 40) = 1;
-
-            // encoder_bit_depth: uint32_t at offset 44
-            *(uint*)(cfg + 44) = 8;
-
-            // encoder_color_format: int32_t at offset 48
-            *(int*)(cfg + 48) = SvtAv1Unmanaged.EB_YUV420;
-
-            // profile: int32_t at offset 52
-            *(int*)(cfg + 52) = 0;
-
-            // Rate control fields - need to find offset of rate_control_mode
-            // After profile(52), tier(56), level(60), color_primaries(64),
-            // transfer_characteristics(68), matrix_coefficients(72), color_range(76),
-            // mastering_display(80: 6*ushort + 2*uint = 20 bytes -> offset 80-99, padded to 100),
-            // content_light_level(100: 2*ushort = 4 bytes -> 100-103),
-            // chroma_sample_position(104: int = 4 bytes -> 104-107)
-            // rate_control_mode: uint8_t at offset 108
-            // But mastering_display alignment needs care:
-            // mastering_display is Sequential struct: 6*ushort(12) + 2*uint(8) = 20 bytes
-            // At offset 80: 20 bytes -> ends at 100
-            // content_light_level: 2*ushort = 4 bytes at 100 -> ends at 104
-            // chroma_sample_position: int at 104 -> ends at 108
-            // rate_control_mode: byte at 108
-
-            // Actually, let's not hard-code deep offsets. The most critical fields
-            // (resolution, framerate, bit depth, color format) are in the first 56 bytes.
-            // Let set_parameter handle the rest with defaults.
-            // CBR mode and bitrate can be set if we know the offsets, but defaults
-            // (CRF mode, QP=35) work fine for testing.
+            if (threads > 0)
+                *(uint*)(cfg + 384) = (uint)threads;           // logical_processors (offset 384)
 
             ret = SvtAv1Unmanaged.svt_av1_enc_set_parameter(encHandle, encConfigPtr);
             if (ret != SvtAv1Unmanaged.EB_ErrorNone)
@@ -155,7 +137,8 @@ namespace libomtnet.codecs
             var settings = new Dav1dUnmanaged.Dav1dSettings();
             Dav1dUnmanaged.dav1d_default_settings(ref settings);
             settings.n_threads = threads > 0 ? threads : Math.Min(4, Environment.ProcessorCount);
-            settings.max_frame_delay = 1; // Low latency
+            settings.max_frame_delay = 1; // No frame pipeline delay
+            settings.apply_grain = 0;     // Skip film grain synthesis
 
             int ret = Dav1dUnmanaged.dav1d_open(out decContext, ref settings);
             if (ret != 0)
