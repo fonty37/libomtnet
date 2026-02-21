@@ -78,6 +78,7 @@ jobs:
         run: dotnet build libomtnet.sln -c Release
 
       - name: Run codec tests
+        timeout-minutes: 5
         run: dotnet test tests/libomtnet.Tests/libomtnet.Tests.csproj -c Release --no-build --logger "console;verbosity=detailed"
         env:
           LD_LIBRARY_PATH: /usr/local/lib
