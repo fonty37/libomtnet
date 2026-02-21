@@ -27,11 +27,11 @@ namespace libomtnet.codecs
         // Reusable buffers for planar<->interleaved conversion
         private float[] interleavedBuffer;
 
-        public OMTOpusCodec(int sampleRate, int channels, int bitrate = 128000)
+        public OMTOpusCodec(int sampleRate, int channels, int bitrate = 0)
         {
             this.sampleRate = sampleRate;
             this.channels = channels;
-            this.bitrate = bitrate;
+            this.bitrate = bitrate > 0 ? bitrate : channels * 64000;
 
             int err;
             encoder = OpusUnmanaged.opus_encoder_create(
