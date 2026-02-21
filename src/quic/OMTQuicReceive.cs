@@ -66,11 +66,15 @@ namespace libomtnet.quic
         /// <param name="port">Sender QUIC port</param>
         /// <param name="preferredFormat">Preferred decoded video format</param>
         /// <param name="flags">Receive flags (preview, compressed, etc.)</param>
+        /// <param name="certificateThumbprint">Optional certificate thumbprint to pin (hex string from sender's CertificateThumbprint)</param>
+        /// <param name="certificateValidator">Optional custom certificate validation callback</param>
         public static async Task<OMTQuicReceive> ConnectAsync(
             string host,
             int port = 6400,
             OMTPreferredVideoFormat preferredFormat = OMTPreferredVideoFormat.UYVY,
-            OMTReceiveFlags flags = OMTReceiveFlags.None)
+            OMTReceiveFlags flags = OMTReceiveFlags.None,
+            string certificateThumbprint = null,
+            Func<X509Certificate2, bool> certificateValidator = null)
         {
             if (!OMTQuicTransport.IsSupported)
                 throw new NotSupportedException(
@@ -101,7 +105,14 @@ namespace libomtnet.quic
                     {
                         OMTQuicTransport.AlpnProtocol
                     },
-                    RemoteCertificateValidationCallback = (_, _, _, _) => true // Accept any cert
+                    RemoteCertificateValidationCallback = (_, cert, _, _) =>
+                    {
+                        if (certificateValidator != null)
+                            return certificateValidator(cert as X509Certificate2 ?? new X509Certificate2(cert));
+                        if (certificateThumbprint != null)
+                            return cert?.GetCertHashString()?.Equals(certificateThumbprint, StringComparison.OrdinalIgnoreCase) == true;
+                        return true; // Default: accept all
+                    }
                 }
             }, receiver.cts.Token);
 

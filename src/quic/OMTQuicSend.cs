@@ -52,6 +52,7 @@ namespace libomtnet.quic
 
         public int Port { get; private set; }
         public bool IsListening { get; private set; }
+        public string CertificateThumbprint => cert?.GetCertHashString();
         public int ConnectionCount
         {
             get { lock (channelsLock) { return channels.Count; } }
