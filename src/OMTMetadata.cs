@@ -25,6 +25,7 @@
 
 using System;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Xml;
 namespace libomtnet
 {
@@ -77,6 +78,7 @@ namespace libomtnet
     {
         public long timestamp;
         public string XML;
+        public byte[] TypedPayload;
         public IPEndPoint Endpoint;
         public OMTMetadata(long timestamp, string xML)
         {
@@ -89,6 +91,12 @@ namespace libomtnet
             XML = xML;
             Endpoint = endpoint;
         }
+        public OMTMetadata(long timestamp, byte[] typedPayload, IPEndPoint endpoint)
+        {
+            Timestamp = timestamp;
+            TypedPayload = typedPayload;
+            Endpoint = endpoint;
+        }
 
         public override long Timestamp
         { get { return timestamp; } set { timestamp = value; } }
@@ -98,6 +106,13 @@ namespace libomtnet
 
         public IntPtr ToIntPtr(ref int length)
         {
+            if (TypedPayload != null)
+            {
+                length = TypedPayload.Length;
+                IntPtr ptr = Marshal.AllocHGlobal(length);
+                Marshal.Copy(TypedPayload, 0, ptr, length);
+                return ptr;
+            }
             return OMTUtils.XMLToIntPtr(XML, ref length);
         }
 

@@ -160,7 +160,11 @@ namespace libomtnet
 
         public int Send(OMTMetadata metadata)
         {
-            OMTBuffer m = OMTBuffer.FromMetadata(metadata.XML);
+            OMTBuffer m;
+            if (metadata.TypedPayload != null)
+                m = new OMTBuffer(metadata.TypedPayload, 0, metadata.TypedPayload.Length);
+            else
+                m = OMTBuffer.FromMetadata(metadata.XML);
             OMTFrame frame = new OMTFrame(OMTFrameType.Metadata, m);
             frame.Timestamp = metadata.Timestamp;
             return Send(frame);
@@ -323,6 +327,24 @@ namespace libomtnet
         {
             if (frame.FrameType == OMTFrameType.Metadata)
             {
+                // Check for typed binary metadata (first byte 0xFD)
+                byte[] rawBuf = frame.Data.Buffer;
+                int rawOff = frame.Data.Offset;
+                int rawLen = frame.Data.Length;
+                if (rawLen > 0 && rawBuf[rawOff] == OMTTypedMetadataCodec.MAGIC)
+                {
+                    lock (metadatas)
+                    {
+                        if (metadatas.Count < OMTConstants.METADATA_MAX_COUNT)
+                        {
+                            byte[] payload = new byte[rawLen];
+                            Buffer.BlockCopy(rawBuf, rawOff, payload, 0, rawLen);
+                            metadatas.Enqueue(new OMTMetadata(frame.Timestamp, payload, endPoint));
+                        }
+                        if (metadataReadyEvent != null) metadataReadyEvent.Set();
+                    }
+                    return true;
+                }
               string xml = frame.Data.ToMetadata();
                 if (xml == OMTMetadataConstants.CHANNEL_SUBSCRIBE_VIDEO)
                 {

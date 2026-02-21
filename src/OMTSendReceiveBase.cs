@@ -161,8 +161,18 @@ namespace libomtnet
                 lastMetadata = IntPtr.Zero;
                 outFrame.Type = OMTFrameType.Metadata;
                 outFrame.Timestamp = frame.Timestamp;
-                outFrame.Data = frame.ToIntPtr(ref outFrame.DataLength);
-                lastMetadata = outFrame.Data;
+                if (frame.TypedPayload != null)
+                {
+                    outFrame.DataLength = frame.TypedPayload.Length;
+                    outFrame.Data = Marshal.AllocHGlobal(outFrame.DataLength);
+                    Marshal.Copy(frame.TypedPayload, 0, outFrame.Data, outFrame.DataLength);
+                    lastMetadata = outFrame.Data;
+                }
+                else
+                {
+                    outFrame.Data = frame.ToIntPtr(ref outFrame.DataLength);
+                    lastMetadata = outFrame.Data;
+                }
                 return true;
             }
         }
