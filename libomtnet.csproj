@@ -10,6 +10,8 @@
     <AssemblyVersion>1.0.0.14</AssemblyVersion>
     <FileVersion>1.0.0.14</FileVersion>
     <Version>1.0.0.14</Version>
+    <!-- QUIC support requires .NET 8+ preview features -->
+    <EnablePreviewFeatures Condition="'$(TargetFramework)' == 'net8.0'">true</EnablePreviewFeatures>
   </PropertyGroup>
 
 </Project>
