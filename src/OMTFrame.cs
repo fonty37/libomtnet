@@ -374,13 +374,13 @@ namespace libomtnet
             videoHeader.Flags = (int)flags;
             videoHeader.ColorSpace = (int)colorSpace;
         }
-        public void ConfigureAudio(int sampleRate, int channels, int samplesPerChannel, OMTActiveAudioChannels activeAudioChannels)
+        public void ConfigureAudio(int sampleRate, int channels, int samplesPerChannel, OMTActiveAudioChannels activeAudioChannels, OMTCodec codec = OMTCodec.FPA1)
         {
             audioHeader.SampleRate = sampleRate;
             audioHeader.Channels = channels;
             audioHeader.SamplesPerChannel = samplesPerChannel;
             audioHeader.ActiveChannels = (uint)activeAudioChannels;
-            audioHeader.Codec = (int)OMTCodec.FPA1;
+            audioHeader.Codec = (int)codec;
         }
 
         protected override void DisposeInternal()
