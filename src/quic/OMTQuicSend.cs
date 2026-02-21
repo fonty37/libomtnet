@@ -57,13 +57,13 @@ namespace libomtnet.quic
             get { lock (channelsLock) { return channels.Count; } }
         }
 
-        private OMTQuicSend(OMTQuality quality, X509Certificate2 certificate)
+        private OMTQuicSend(OMTQuality quality, X509Certificate2 certificate, sync.IOMTTimeSource timeSource)
         {
             this.quality = quality;
             this.suggestedQuality = quality;
             this.cert = certificate;
-            videoClock = new OMTClock(false);
-            audioClock = new OMTClock(true);
+            videoClock = new OMTClock(false, timeSource);
+            audioClock = new OMTClock(true, timeSource);
             tempVideo = new OMTFrame(OMTFrameType.Video, new OMTBuffer(OMTConstants.VIDEO_MIN_SIZE, true));
             tempAudio = new OMTFrame(OMTFrameType.Audio, new OMTBuffer(OMTConstants.AUDIO_MIN_SIZE, true));
             tempAudioBuffer = new OMTBuffer(OMTConstants.AUDIO_MIN_SIZE, true);
@@ -80,7 +80,8 @@ namespace libomtnet.quic
             string name,
             OMTQuality quality,
             int port = 0,
-            X509Certificate2 certificate = null)
+            X509Certificate2 certificate = null,
+            sync.IOMTTimeSource timeSource = null)
         {
             if (!OMTQuicTransport.IsSupported)
                 throw new NotSupportedException(
@@ -88,7 +89,7 @@ namespace libomtnet.quic
                     "Requires Windows 11+ or Linux with libmsquic installed.");
 
             var cert = certificate ?? OMTQuicTransport.GenerateSelfSignedCert();
-            var sender = new OMTQuicSend(quality, cert);
+            var sender = new OMTQuicSend(quality, cert, timeSource);
 
             // Find an available port
             int startPort = port > 0 ? port : OMTConstants.NETWORK_PORT_START;
@@ -292,6 +293,27 @@ namespace libomtnet.quic
                         return SendToAll(tempVideo);
                     }
                 }
+                else if (frame.Codec == (int)OMTCodec.AV1)
+                {
+                    // Pre-encoded AV1 passthrough
+                    if (frame.DataLength > 0)
+                    {
+                        tempVideo.SetDataLength(frame.DataLength + frame.FrameMetadataLength);
+                        tempVideo.SetMetadataLength(frame.FrameMetadataLength);
+                        tempVideo.SetPreviewDataLength(frame.DataLength + frame.FrameMetadataLength);
+                        System.Runtime.InteropServices.Marshal.Copy(frame.Data, tempVideo.Data.Buffer, 0, frame.DataLength);
+                        if (frame.FrameMetadataLength > 0)
+                        {
+                            System.Runtime.InteropServices.Marshal.Copy(frame.FrameMetadata,
+                                tempVideo.Data.Buffer, frame.DataLength, frame.FrameMetadataLength);
+                        }
+                        tempVideo.ConfigureVideo((int)OMTCodec.AV1, frame.Width, frame.Height,
+                            frame.FrameRateN, frame.FrameRateD, frame.AspectRatio, frame.Flags, frame.ColorSpace);
+                        videoClock.Process(ref frame);
+                        tempVideo.Timestamp = frame.Timestamp;
+                        return SendToAll(tempVideo);
+                    }
+                }
                 else
                 {
                     // Encode to VMX1 (same logic as OMTSend)
@@ -338,6 +360,22 @@ namespace libomtnet.quic
 
                 if (frame.DataLength > OMTConstants.AUDIO_MAX_SIZE)
                     return 0;
+
+                // Pre-encoded Opus passthrough
+                if (frame.Codec == (int)OMTCodec.OPUS)
+                {
+                    tempAudio.Data.Resize(frame.DataLength + frame.FrameMetadataLength);
+                    System.Runtime.InteropServices.Marshal.Copy(frame.Data, tempAudio.Data.Buffer, 0, frame.DataLength);
+                    if (frame.FrameMetadataLength > 0 && frame.FrameMetadata != IntPtr.Zero)
+                        tempAudio.Data.Append(frame.FrameMetadata, 0, frame.FrameMetadataLength);
+                    tempAudio.Data.SetBuffer(0, frame.DataLength);
+                    tempAudio.SetDataLength(frame.DataLength + frame.FrameMetadataLength);
+                    tempAudio.SetMetadataLength(frame.FrameMetadataLength);
+                    tempAudio.ConfigureAudio(frame.SampleRate, frame.Channels, frame.SamplesPerChannel, 0, OMTCodec.OPUS);
+                    audioClock.Process(ref frame);
+                    tempAudio.Timestamp = frame.Timestamp;
+                    return SendToAll(tempAudio);
+                }
 
                 tempAudioBuffer.Resize(frame.DataLength);
                 tempAudio.Data.Resize(frame.DataLength + frame.FrameMetadataLength);

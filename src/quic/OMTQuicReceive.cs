@@ -39,6 +39,8 @@ namespace libomtnet.quic
 
         private OMTVMX1Codec codec;
         private OMTFPA1Codec audioCodec;
+        private OMTAV1Codec av1Codec;
+        private OMTOpusCodec opusCodec;
         private OMTPinnedBuffer tempVideo;
         private OMTPinnedBuffer tempAudio;
         private int tempVideoStride;
@@ -207,6 +209,10 @@ namespace libomtnet.quic
                         // Decode VMX1
                         DecodeVideo(frame, header, ref outFrame);
                     }
+                    else if (header.Codec == (int)OMTCodec.AV1)
+                    {
+                        DecodeAV1Video(frame, header, ref outFrame);
+                    }
                     else
                     {
                         // Raw passthrough
@@ -320,6 +326,69 @@ namespace libomtnet.quic
             tempVideoStride = stride;
         }
 
+        private void DecodeAV1Video(OMTFrame frame, OMTVideoHeader header, ref OMTMediaFrame outFrame)
+        {
+            OMTVideoFlags flags = (OMTVideoFlags)header.Flags;
+            bool alpha = flags.HasFlag(OMTVideoFlags.Alpha);
+            int frameLength = frame.Data.Length - frame.MetadataLength;
+            int fps = (int)OMTUtils.ToFrameRate(header.FrameRateN, header.FrameRateD);
+
+            if (receiveFlags.HasFlag(OMTReceiveFlags.CompressedOnly))
+            {
+                // Compressed passthrough — no decode
+                if (tempVideo == null || tempVideo.Length < frameLength)
+                {
+                    tempVideo?.Dispose();
+                    tempVideo = new OMTPinnedBuffer(frameLength);
+                }
+                Buffer.BlockCopy(frame.Data.Buffer, frame.Data.Offset, tempVideo.Buffer, 0, frameLength);
+                tempVideo.SetBuffer(0, frameLength);
+                outFrame.CompressedData = tempVideo.Pointer;
+                outFrame.CompressedLength = frameLength;
+                outFrame.DataLength = 0;
+                outFrame.Codec = (int)OMTCodec.AV1;
+                return;
+            }
+
+            if (av1Codec == null || av1Codec.Width != header.Width || av1Codec.Height != header.Height)
+            {
+                av1Codec?.Dispose();
+                av1Codec = new OMTAV1Codec(header.Width, header.Height, fps);
+            }
+
+            VMXImageType outputType;
+            if (preferredFormat == OMTPreferredVideoFormat.BGRA ||
+                (preferredFormat == OMTPreferredVideoFormat.UYVYorBGRA && alpha))
+            {
+                outputType = VMXImageType.BGRA;
+                tempVideoStride = header.Width * 4;
+                outFrame.Codec = (int)OMTCodec.BGRA;
+            }
+            else
+            {
+                outputType = VMXImageType.UYVY;
+                tempVideoStride = header.Width * 2;
+                outFrame.Codec = (int)OMTCodec.UYVY;
+            }
+
+            int bufLen = tempVideoStride * header.Height * 2;
+            if (tempVideo == null || tempVideo.Length < bufLen)
+            {
+                tempVideo?.Dispose();
+                tempVideo = new OMTPinnedBuffer(bufLen);
+            }
+
+            byte[] dst = tempVideo.Buffer;
+            bool result = av1Codec.Decode(outputType, frame.Data.Buffer, frameLength, ref dst, tempVideoStride);
+
+            if (result)
+            {
+                outFrame.Data = tempVideo.Pointer;
+                outFrame.DataLength = tempVideoStride * header.Height;
+                outFrame.Stride = tempVideoStride;
+            }
+        }
+
         private bool TryReceiveAudio(ref OMTMediaFrame outFrame)
         {
             if (audioChannel == null || audioChannel.ReadyFrameCount == 0) return false;
@@ -359,6 +428,43 @@ namespace libomtnet.quic
                             outFrame.DataLength = tempAudio.Length;
 
                             return true;
+                        }
+                    }
+                    else if (header.Codec == (int)OMTCodec.OPUS)
+                    {
+                        int len = header.SamplesPerChannel * header.Channels * OMTConstants.AUDIO_SAMPLE_SIZE;
+                        if (len <= OMTConstants.AUDIO_MAX_SIZE)
+                        {
+                            if (opusCodec == null || opusCodec.SampleRate != header.SampleRate || opusCodec.Channels != header.Channels)
+                            {
+                                opusCodec?.Dispose();
+                                opusCodec = new OMTOpusCodec(header.SampleRate, header.Channels);
+                            }
+
+                            if (tempAudio == null || tempAudio.Length < len)
+                            {
+                                tempAudio?.Dispose();
+                                tempAudio = new OMTPinnedBuffer(len);
+                            }
+                            tempAudio.SetBuffer(0, 0);
+
+                            byte[] opusSrc = new byte[frame.Data.Length - frame.MetadataLength];
+                            Buffer.BlockCopy(frame.Data.Buffer, frame.Data.Offset, opusSrc, 0, opusSrc.Length);
+
+                            int decoded = opusCodec.Decode(opusSrc, opusSrc.Length, tempAudio, header.SamplesPerChannel);
+                            if (decoded > 0)
+                            {
+                                outFrame.Type = OMTFrameType.Audio;
+                                outFrame.Codec = (int)OMTCodec.FPA1; // Output as planar float
+                                outFrame.Timestamp = frame.Timestamp;
+                                outFrame.SampleRate = header.SampleRate;
+                                outFrame.Channels = header.Channels;
+                                outFrame.SamplesPerChannel = decoded;
+                                outFrame.Data = tempAudio.Pointer;
+                                outFrame.DataLength = tempAudio.Length;
+
+                                return true;
+                            }
                         }
                     }
 
@@ -417,6 +523,8 @@ namespace libomtnet.quic
             connection?.DisposeAsync().AsTask().GetAwaiter().GetResult();
             codec?.Dispose();
             audioCodec?.Dispose();
+            av1Codec?.Dispose();
+            opusCodec?.Dispose();
             tempVideo?.Dispose();
             tempAudio?.Dispose();
             OMTMetadata.FreeIntPtr(lastMetadata);
