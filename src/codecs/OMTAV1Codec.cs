@@ -39,7 +39,7 @@ namespace libomtnet.codecs
         private IntPtr ioFormatPtr;
 
         public OMTAV1Codec(int width, int height, int framesPerSecond,
-            int preset = 12, int targetBitrateMbps = 6, int threads = 0)
+            int preset = 12, int targetBitrateMbps = 6, int threads = 4)
         {
             this.width = width;
             this.height = height;
@@ -110,8 +110,7 @@ namespace libomtnet.codecs
             cfg[357] = 0;                                      // enable_tf (offset 357): disable temporal filter
             cfg[366] = 1;                                      // fast_decode (offset 366): ease decoder burden
 
-            if (threads > 0)
-                *(uint*)(cfg + 384) = (uint)threads;           // logical_processors (offset 384)
+            *(uint*)(cfg + 384) = (uint)(threads > 0 ? threads : 4); // logical_processors (offset 384): default 4
 
             ret = SvtAv1Unmanaged.svt_av1_enc_set_parameter(encHandle, encConfigPtr);
             if (ret != SvtAv1Unmanaged.EB_ErrorNone)
