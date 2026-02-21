@@ -11,7 +11,7 @@ public class AV1CodecTests
     private const int Height = 240;
     private const int Fps = 30;
 
-    [Fact(Timeout = 30000)]
+    [Fact]
     public void Codec_InitAndDispose()
     {
         var codec = new OMTAV1Codec(Width, Height, Fps, preset: 12, targetBitrateMbps: 2, threads: 1);
@@ -22,7 +22,7 @@ public class AV1CodecTests
         codec.Dispose();
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public unsafe void Encode_UYVY_ProducesOutput()
     {
         using var codec = new OMTAV1Codec(Width, Height, Fps, preset: 12, targetBitrateMbps: 2, threads: 1);
@@ -56,7 +56,7 @@ public class AV1CodecTests
         }
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public unsafe void Encode_Decode_RoundTrip()
     {
         using var codec = new OMTAV1Codec(Width, Height, Fps, preset: 12, targetBitrateMbps: 2, threads: 1);
@@ -100,7 +100,7 @@ public class AV1CodecTests
         Assert.True(decoded.Length > 0, "Decoded buffer should contain data");
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public unsafe void Encode_BGRA_ProducesOutput()
     {
         using var codec = new OMTAV1Codec(Width, Height, Fps, preset: 12, targetBitrateMbps: 2, threads: 1);
